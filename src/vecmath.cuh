@@ -7,7 +7,6 @@
 #define KERNEL_OK 1
 #define KERNEL_ERROR 0
 //int idx = threadIdx.x + blockIdx.x * blockDim.x;
-
 __device__ void zero_vector(float* vec)
 {
     vec[0] = 0.0;
@@ -24,13 +23,30 @@ __device__ void copy_vector_to(float* vec_in, float* vec_out)
 
 __device__ void add_vectors(float* vec_1, float* vec_2, float* vec_out)
 {
+    /*
+    atomicAdd(&vec_out[0], vec_1[0]);
+    atomicAdd(&vec_out[0], vec_2[0]);
+    atomicAdd(&vec_out[1], vec_1[1]);
+    atomicAdd(&vec_out[1], vec_2[1]);
+    atomicAdd(&vec_out[2], vec_1[2]);
+    atomicAdd(&vec_out[2], vec_2[2]);
+    */
     vec_out[0] = vec_1[0] + vec_2[0];
     vec_out[1] = vec_1[1] + vec_2[1];
     vec_out[2] = vec_1[2] + vec_2[2];
+    
 }
 
 __device__ void sub_vectors(float* vec_1, float* vec_2, float* vec_out)
 {
+    /*
+    atomicAdd(&vec_out[0], vec_1[0]);
+    atomicAdd(&vec_out[0], -1.0 * vec_2[0]);
+    atomicAdd(&vec_out[1], vec_1[1]);
+    atomicAdd(&vec_out[1], -1.0 * vec_2[1]);
+    atomicAdd(&vec_out[2], vec_1[2]);
+    atomicAdd(&vec_out[2], -1.0 * vec_2[2]);
+    */
     vec_out[0] = vec_1[0] - vec_2[0];
     vec_out[1] = vec_1[1] - vec_2[1];
     vec_out[2] = vec_1[2] - vec_2[2];
@@ -136,7 +152,7 @@ __device__ int is_point_in_tri(float* p0, float* p1, float* p2, float* t)
     return 0;
 }
 
-__device__ int is_point_in_tet(float* p0, float* p1, float* p2, float* p3, float* t)
+__device__ int is_point_in_tet(float* p0, float* p1, float* p2, float* p3, float* t, int include_border, float percent_offset)
 {
     float vec01[3] = {0.0, 0.0, 0.0};
     float vec02[3] = {0.0, 0.0, 0.0};
@@ -153,20 +169,25 @@ __device__ int is_point_in_tet(float* p0, float* p1, float* p2, float* p3, float
     float vol2 = tet_volume(vec02, vec03, vec0t);
     float vol3 = tet_volume(vec03, vec01, vec0t);
 
-    if(vol1 >= 0 && vol2 >= 0 && vol3 >= 0 && vol1 + vol2 + vol3 <= vol)
+    float vol_adj = vol * ((100.0 + percent_offset)/100.0);
+    if(include_border)
     {
-        return 1;
+        if(vol1 >= 0 && vol2 >= 0 && vol3 >= 0 && vol1 + vol2 + vol3 <= vol_adj)
+        {
+            return 1;
+        }
+    }
+    else
+    {
+        if(vol1 > 0 && vol2 > 0 && vol3 > 0 && vol1 + vol2 + vol3 < vol_adj)
+        {
+            return 1;
+        }
     }
     return 0;
 }
 
-__device__ int ray_plane_tracer(
-    float* plane_point, 
-    float* plane_normal, 
-    float* ray_origin, 
-    float* ray_dir, 
-    float* intersection_out
-)
+__device__ int ray_plane_tracer(float* plane_point, float* plane_normal, float* ray_origin, float* ray_dir, float* intersection_out)
 {
     float plane_normal_normalized[3] = {0.0, 0.0, 0.0};
     float ray_dir_normalized[3] = {0.0, 0.0, 0.0};
@@ -240,5 +261,42 @@ __device__ int get_mesh_offset(int* counts, int mesh_ID)
         offset += counts[i];
     }
     return offset;
+}
+
+int get_mesh_offset_host(int* counts, int mesh_ID)
+{
+    int offset = 0;
+    if(mesh_ID <= 0) return 0;
+    for(int i = 0; i < mesh_ID; i++)
+    {
+        offset += counts[i];
+    }
+    return offset;
+}
+
+int convert_coord_to_id_host(int x, int y, int z, int xs, int ys, int zs)
+{
+    return x + (y * xs) + (z * xs * ys);
+}
+
+void convert_id_to_coord_host(int id, int xs, int ys, int zs, int* out)
+{
+    out[2] = id / (xs * ys);
+    int rem = id % (xs * ys);
+    out[1] =  rem / xs;
+    out[0] = rem % xs;
+}
+
+__device__ int convert_coord_to_id(int x, int y, int z, int xs, int ys, int zs)
+{
+    return x + (y * xs) + (z * xs * ys);
+}
+
+__device__ void convert_id_to_coord(int id, int xs, int ys, int zs, int* out)
+{
+    out[2] = id / (xs * ys);
+    int rem = id % (xs * ys);
+    out[1] =  rem / xs;
+    out[0] = rem % xs;
 }
 #endif /* VECMATH_CUH_ */

@@ -2,7 +2,7 @@
 
 # Compiler and compiler flags
 NVCC = nvcc
-CFLAGS = -std=c++20 -arch=sm_80
+CFLAGS = -std=c++20 -arch=sm_80 -rdc=true
 
 # Directories
 SRC_DIR = src
